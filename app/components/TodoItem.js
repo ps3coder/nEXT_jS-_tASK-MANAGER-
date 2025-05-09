@@ -26,20 +26,23 @@ export default function TodoItem({ todo, onEdit }) {
   const { setSelectedTaskId, setMode } = usePomodoro();
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
 
+  // Get the correct ID whether it's from MongoDB (_id) or localStorage (id)
+  const todoId = todo._id || todo.id;
+
   const handleToggleComplete = () => {
-    toggleComplete(todo.id);
+    toggleComplete(todoId);
   };
 
   const handleDelete = () => {
     if (showConfirmDelete) {
-      deleteTodo(todo.id);
+      deleteTodo(todoId);
     } else {
       setShowConfirmDelete(true);
     }
   };
 
   const handleStartPomodoro = () => {
-    setSelectedTaskId(todo.id);
+    setSelectedTaskId(todoId);
     setMode("pomodoro");
     // Scroll to pomodoro timer on mobile
     if (window.innerWidth < 768) {

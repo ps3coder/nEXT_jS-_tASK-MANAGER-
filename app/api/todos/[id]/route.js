@@ -6,9 +6,10 @@ import User from "@/app/models/User";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 // Get a specific todo
-export async function GET(request, { params }) {
+export async function GET(request, context) {
   try {
-    const { id } = params;
+    const { params } = context;
+    const id = params.id;
     const session = await getServerSession(authOptions);
 
     // Check if user is authenticated
@@ -48,9 +49,10 @@ export async function GET(request, { params }) {
 }
 
 // Update a todo
-export async function PUT(request, { params }) {
+export async function PUT(request, context) {
   try {
-    const { id } = params;
+    const { params } = context;
+    const id = params.id;
     const session = await getServerSession(authOptions);
 
     // Check if user is authenticated
@@ -99,9 +101,10 @@ export async function PUT(request, { params }) {
 }
 
 // Delete a todo
-export async function DELETE(request, { params }) {
+export async function DELETE(request, context) {
   try {
-    const { id } = params;
+    const { params } = context;
+    const id = params.id;
     const session = await getServerSession(authOptions);
 
     // Check if user is authenticated

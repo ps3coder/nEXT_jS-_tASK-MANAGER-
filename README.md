@@ -23,8 +23,10 @@ A high-performance, responsive, and feature-rich todo list application built wit
   - Search and filter functionality
 
 - 💾 **Data Persistence**
-  - Local storage for offline usage
-  - Data preserved between sessions
+  - MongoDB database storage
+  - User authentication with NextAuth.js
+  - Data synchronized across devices
+  - User settings persistence
 
 ## Getting Started
 
@@ -63,28 +65,46 @@ yarn dev
 ## Technology Stack
 
 - **Frontend**: Next.js, React, JavaScript
-- **Styling**: Tailwind CSS, CSS variables
+- **Backend**: Next.js API routes
+- **Database**: MongoDB
+- **Authentication**: NextAuth.js
+- **Styling**: Material UI, Tailwind CSS
 - **Animation**: Framer Motion
-- **Icons**: React Icons
+- **Icons**: Material Icons
 - **Date Handling**: date-fns
 - **State Management**: React Context API
-- **Storage**: localStorage
 
 ## Project Structure
 
 ```
 todo-app/
 ├── app/               # Next.js app directory
+│   ├── api/           # API routes
 │   ├── components/    # React components
 │   ├── context/       # Context providers
 │   ├── hooks/         # Custom React hooks
+│   ├── lib/           # Library code (MongoDB connection, etc.)
+│   ├── models/        # MongoDB models
+│   ├── services/      # API service functions
 │   ├── utils/         # Utility functions
 │   ├── globals.css    # Global styles
 │   ├── layout.js      # Root layout
 │   └── page.js        # Home page
+├── middleware.js      # NextAuth middleware
 ├── public/            # Static assets
 └── ...                # Config files
 ```
+
+## MongoDB Setup
+
+1. Install MongoDB Compass from [mongodb.com/try/download/compass](https://www.mongodb.com/try/download/compass)
+2. Start a local MongoDB server or create a MongoDB Atlas account
+3. Create a `.env.local` file in the project root with:
+
+```
+MONGODB_URI=mongodb://localhost:27017/todo-app
+# Or for MongoDB Atlas:
+# MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/todo-app
 
 ## License
 

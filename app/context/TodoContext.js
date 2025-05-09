@@ -2,80 +2,36 @@
 
 import { createContext, useContext, useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
+import * as todoService from "@/app/services/todoService";
 
 const TodoContext = createContext();
 
 export function TodoProvider({ children }) {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [todos, setTodos] = useState([]);
   const [filter, setFilter] = useState("all"); // all, active, completed
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Helper function to determine if we should use API or localStorage
-  const isApiEnabled = () => {
-    return session?.user?.id != null; // Use API if authenticated with a real user ID
-  };
-
-  // Get user-specific storage key for localStorage fallback
-  const getUserStorageKey = () => {
-    if (!session?.user?.email) return null;
-    return `todos_${session.user.email.replace(/[^a-zA-Z0-9]/g, "_")}`;
-  };
-
-  // Fetch todos from API or localStorage
+  // Fetch todos from API
   const fetchTodos = async () => {
+    // Don't fetch if not authenticated
+    if (status !== "authenticated") {
+      setTodos([]);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
-      if (isApiEnabled()) {
-        // Fetch from API
-        const response = await fetch("/api/todos");
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch todos");
-        }
-
-        const data = await response.json();
-        setTodos(data);
-      } else {
-        // Fallback to localStorage
-        const storageKey = getUserStorageKey();
-        if (!storageKey) {
-          setTodos([]);
-          return;
-        }
-
-        const savedTodos = localStorage.getItem(storageKey);
-        if (savedTodos) {
-          try {
-            setTodos(JSON.parse(savedTodos));
-          } catch (error) {
-            console.error("Error parsing saved todos:", error);
-            setTodos([]);
-          }
-        } else {
-          setTodos([]);
-        }
-      }
+      const data = await todoService.fetchTodos();
+      setTodos(data);
     } catch (err) {
       console.error("Error fetching todos:", err);
       setError("Failed to load your tasks. Please try again.");
-
-      // Fallback to localStorage if API fails
-      const storageKey = getUserStorageKey();
-      if (storageKey) {
-        const savedTodos = localStorage.getItem(storageKey);
-        if (savedTodos) {
-          try {
-            setTodos(JSON.parse(savedTodos));
-          } catch (error) {
-            setTodos([]);
-          }
-        }
-      }
     } finally {
       setIsLoading(false);
     }
@@ -83,17 +39,9 @@ export function TodoProvider({ children }) {
 
   // Load todos when session changes
   useEffect(() => {
-    if (session === undefined) return; // Wait for session to be determined
+    if (status === "loading") return;
     fetchTodos();
-  }, [session]);
-
-  // Save todos to localStorage as a fallback
-  useEffect(() => {
-    const storageKey = getUserStorageKey();
-    if (!storageKey || isLoading) return;
-
-    localStorage.setItem(storageKey, JSON.stringify(todos));
-  }, [todos, session, isLoading]);
+  }, [session, status]);
 
   // Add a new todo
   const addTodo = async (
@@ -105,7 +53,9 @@ export function TodoProvider({ children }) {
     recurrencePattern = null
   ) => {
     try {
-      const newTodo = {
+      setError(null);
+
+      const todoData = {
         task,
         dueDate,
         priority,
@@ -114,142 +64,79 @@ export function TodoProvider({ children }) {
         recurrencePattern: isRecurring ? recurrencePattern : null,
       };
 
-      if (isApiEnabled()) {
-        // Add via API
-        const response = await fetch("/api/todos", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(newTodo),
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to add todo");
-        }
-
-        const addedTodo = await response.json();
-        setTodos((prevTodos) => [...prevTodos, addedTodo]);
-      } else {
-        // Add directly to state (localStorage fallback)
-        const todoWithId = {
-          ...newTodo,
-          id: Date.now().toString(),
-          completed: false,
-          createdAt: new Date().toISOString(),
-          userEmail: session?.user?.email,
-        };
-
-        setTodos((prevTodos) => [...prevTodos, todoWithId]);
-      }
+      const newTodo = await todoService.addTodo(todoData);
+      setTodos((prevTodos) => [...prevTodos, newTodo]);
+      return newTodo;
     } catch (err) {
       console.error("Error adding todo:", err);
       setError("Failed to add task. Please try again.");
+      throw err;
     }
   };
 
   // Edit an existing todo
   const editTodo = async (id, updatedFields) => {
     try {
-      if (isApiEnabled()) {
-        // Update via API
-        const response = await fetch(`/api/todos/${id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(updatedFields),
-        });
+      setError(null);
 
-        if (!response.ok) {
-          throw new Error("Failed to update todo");
-        }
+      const updatedTodo = await todoService.updateTodo(id, updatedFields);
 
-        const updatedTodo = await response.json();
-        setTodos((prevTodos) =>
-          prevTodos.map((todo) =>
-            todo._id === id || todo.id === id ? updatedTodo : todo
-          )
-        );
-      } else {
-        // Update directly in state (localStorage fallback)
-        setTodos((prevTodos) =>
-          prevTodos.map((todo) =>
-            todo.id === id ? { ...todo, ...updatedFields } : todo
-          )
-        );
-      }
+      setTodos((prevTodos) =>
+        prevTodos.map((todo) =>
+          todo._id === id || todo.id === id ? updatedTodo : todo
+        )
+      );
+
+      return updatedTodo;
     } catch (err) {
       console.error("Error updating todo:", err);
       setError("Failed to update task. Please try again.");
+      throw err;
     }
   };
 
   // Delete a todo
   const deleteTodo = async (id) => {
     try {
-      if (isApiEnabled()) {
-        // Delete via API
-        const response = await fetch(`/api/todos/${id}`, {
-          method: "DELETE",
-        });
+      setError(null);
 
-        if (!response.ok) {
-          throw new Error("Failed to delete todo");
-        }
-      }
+      await todoService.deleteTodo(id);
 
-      // Remove from state regardless of API success
+      // Remove from state after successful API call
       setTodos((prevTodos) =>
         prevTodos.filter((todo) => todo._id !== id && todo.id !== id)
       );
     } catch (err) {
       console.error("Error deleting todo:", err);
       setError("Failed to delete task. Please try again.");
+      throw err;
     }
   };
 
   // Toggle todo completion status
   const toggleComplete = async (id) => {
     try {
+      setError(null);
+
       const todoToToggle = todos.find(
         (todo) => todo._id === id || todo.id === id
       );
       if (!todoToToggle) return;
 
-      const updatedData = { completed: !todoToToggle.completed };
+      const updatedTodo = await todoService.toggleTodoComplete(
+        id,
+        !todoToToggle.completed
+      );
 
-      if (isApiEnabled()) {
-        // Update via API
-        const response = await fetch(`/api/todos/${id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(updatedData),
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to update todo completion");
-        }
-
-        const updatedTodo = await response.json();
-        setTodos((prevTodos) =>
-          prevTodos.map((todo) =>
-            todo._id === id || todo.id === id ? updatedTodo : todo
-          )
-        );
-      } else {
-        // Update directly in state (localStorage fallback)
-        setTodos((prevTodos) =>
-          prevTodos.map((todo) =>
-            todo.id === id ? { ...todo, ...updatedData } : todo
-          )
-        );
-      }
+      setTodos((prevTodos) =>
+        prevTodos.map((todo) =>
+          todo._id === id || todo.id === id ? updatedTodo : todo
+        )
+      );
     } catch (err) {
       console.error("Error toggling todo completion:", err);
       setError("Failed to update task. Please try again.");
+      throw err;
     }
   };
 

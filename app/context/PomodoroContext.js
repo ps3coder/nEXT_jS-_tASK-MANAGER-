@@ -1,15 +1,19 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useRef } from "react";
+import { useSession } from "next-auth/react";
+import * as settingsService from "@/app/services/settingsService";
 
 const PomodoroContext = createContext();
 
 export function PomodoroProvider({ children }) {
+  const { data: session, status } = useSession();
   const [isRunning, setIsRunning] = useState(false);
   const [mode, setMode] = useState("pomodoro"); // pomodoro, shortBreak, longBreak
   const [timeLeft, setTimeLeft] = useState(25 * 60); // 25 minutes in seconds
   const [totalPomodoros, setTotalPomodoros] = useState(0);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Settings with defaults
   const [settings, setSettings] = useState({
@@ -23,22 +27,45 @@ export function PomodoroProvider({ children }) {
 
   const timerRef = useRef(null);
 
-  // Load settings from localStorage on first render
+  // Load settings from MongoDB
   useEffect(() => {
-    const savedSettings = localStorage.getItem("pomodoroSettings");
-    if (savedSettings) {
+    async function loadSettings() {
       try {
-        setSettings(JSON.parse(savedSettings));
+        // For unauthenticated users, use defaults
+        if (status !== "authenticated") {
+          setIsLoading(false);
+          return;
+        }
+
+        // For authenticated users, fetch from API
+        const userSettings = await settingsService.fetchSettings();
+        if (userSettings.pomodoroSettings) {
+          setSettings(userSettings.pomodoroSettings);
+        }
       } catch (error) {
-        console.error("Error parsing pomodoro settings:", error);
+        console.error("Error loading pomodoro settings:", error);
+      } finally {
+        setIsLoading(false);
       }
     }
-  }, []);
 
-  // Save settings to localStorage when they change
+    loadSettings();
+  }, [session, status]);
+
+  // Save settings to MongoDB when they change
   useEffect(() => {
-    localStorage.setItem("pomodoroSettings", JSON.stringify(settings));
-  }, [settings]);
+    async function saveSettings() {
+      if (status !== "authenticated" || isLoading) return;
+
+      try {
+        await settingsService.updatePomodoroSettings(settings);
+      } catch (error) {
+        console.error("Error saving pomodoro settings:", error);
+      }
+    }
+
+    saveSettings();
+  }, [settings, status, isLoading]);
 
   // Update timeLeft when mode or settings change
   useEffect(() => {
@@ -61,81 +88,64 @@ export function PomodoroProvider({ children }) {
   useEffect(() => {
     if (isRunning) {
       timerRef.current = setInterval(() => {
-        setTimeLeft((prevTime) => {
-          if (prevTime <= 1) {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            clearInterval(timerRef.current);
+            setIsRunning(false);
             handleTimerComplete();
             return 0;
           }
-          return prevTime - 1;
+          return prev - 1;
         });
       }, 1000);
-    } else {
+    } else if (timerRef.current) {
       clearInterval(timerRef.current);
     }
 
-    return () => clearInterval(timerRef.current);
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
   }, [isRunning]);
 
   // Handle timer completion
   const handleTimerComplete = () => {
-    clearInterval(timerRef.current);
-    setIsRunning(false);
-
-    // Play notification sound
-    const audio = new Audio("/notification.mp3");
-    audio
-      .play()
-      .catch((error) =>
-        console.error("Error playing notification sound:", error)
-      );
-
-    // Show browser notification if supported
-    if ("Notification" in window && Notification.permission === "granted") {
-      new Notification("Pomodoro Timer", {
-        body: `${
-          mode === "pomodoro"
-            ? "Time for a break!"
-            : "Break finished. Back to work!"
-        }`,
-        icon: "/icon.png",
-      });
-    }
-
-    // Handle cycle transitions
     if (mode === "pomodoro") {
-      const newTotalPomodoros = totalPomodoros + 1;
-      setTotalPomodoros(newTotalPomodoros);
+      setTotalPomodoros((prev) => prev + 1);
 
-      // Determine if it's time for a long break
-      if (newTotalPomodoros % settings.longBreakInterval === 0) {
-        setMode("longBreak");
-        if (settings.autoStartBreaks) setIsRunning(true);
-      } else {
-        setMode("shortBreak");
-        if (settings.autoStartBreaks) setIsRunning(true);
+      const nextMode =
+        totalPomodoros > 0 && totalPomodoros % settings.longBreakInterval === 0
+          ? "longBreak"
+          : "shortBreak";
+
+      setMode(nextMode);
+
+      if (settings.autoStartBreaks) {
+        setIsRunning(true);
       }
     } else {
-      // Break is over, go back to pomodoro
       setMode("pomodoro");
-      if (settings.autoStartPomodoros) setIsRunning(true);
+
+      if (settings.autoStartPomodoros) {
+        setIsRunning(true);
+      }
     }
   };
 
-  // Start the timer
+  // Start/resume timer
   const startTimer = () => {
     setIsRunning(true);
   };
 
-  // Pause the timer
+  // Pause timer
   const pauseTimer = () => {
     setIsRunning(false);
   };
 
-  // Reset the timer
+  // Reset current timer
   const resetTimer = () => {
     setIsRunning(false);
-
-    // Reset to the current mode's full time
     switch (mode) {
       case "pomodoro":
         setTimeLeft(settings.pomodoro * 60);
@@ -146,8 +156,6 @@ export function PomodoroProvider({ children }) {
       case "longBreak":
         setTimeLeft(settings.longBreak * 60);
         break;
-      default:
-        setTimeLeft(settings.pomodoro * 60);
     }
   };
 
@@ -156,33 +164,25 @@ export function PomodoroProvider({ children }) {
     setSettings((prev) => ({ ...prev, ...newSettings }));
   };
 
-  // Format time for display (mm:ss)
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs
-      .toString()
-      .padStart(2, "0")}`;
+  // Value object
+  const value = {
+    isRunning,
+    mode,
+    timeLeft,
+    settings,
+    totalPomodoros,
+    selectedTaskId,
+    isLoading,
+    setMode,
+    startTimer,
+    pauseTimer,
+    resetTimer,
+    updateSettings,
+    setSelectedTaskId,
   };
 
   return (
-    <PomodoroContext.Provider
-      value={{
-        isRunning,
-        mode,
-        timeLeft,
-        totalPomodoros,
-        settings,
-        selectedTaskId,
-        formatTime,
-        startTimer,
-        pauseTimer,
-        resetTimer,
-        setMode,
-        updateSettings,
-        setSelectedTaskId,
-      }}
-    >
+    <PomodoroContext.Provider value={value}>
       {children}
     </PomodoroContext.Provider>
   );

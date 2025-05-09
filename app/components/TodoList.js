@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useTodos } from "@/app/context/TodoContext";
 import TodoItem from "@/app/components/TodoItem";
 import TodoForm from "@/app/components/TodoForm";
+import LoadingState from "@/app/components/LoadingState";
+import ErrorState from "@/app/components/ErrorState";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Typography from "@mui/material/Typography";
@@ -25,7 +27,16 @@ import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import FilterListIcon from "@mui/icons-material/FilterList";
 
 export default function TodoList() {
-  const { getFilteredTodos, filter, setFilter, sortTodos } = useTodos();
+  const {
+    getFilteredTodos,
+    filter,
+    setFilter,
+    sortTodos,
+    isLoading,
+    error,
+    refreshTodos,
+  } = useTodos();
+
   const [editingTodo, setEditingTodo] = useState(null);
   const [sortBy, setSortBy] = useState("dueDate");
 
@@ -63,6 +74,54 @@ export default function TodoList() {
     { id: "priority", label: "Priority" },
     { id: "alphabetical", label: "Alphabetical" },
   ];
+
+  // Determine what to render based on loading and error state
+  const renderContent = () => {
+    if (isLoading) {
+      return <LoadingState message="Loading your tasks..." />;
+    }
+
+    if (error) {
+      return <ErrorState message={error} onRetry={refreshTodos} />;
+    }
+
+    if (editingTodo) {
+      return <TodoForm todoToEdit={editingTodo} onCancel={handleCancelEdit} />;
+    }
+
+    if (sortedTodos.length > 0) {
+      return (
+        <AnimatePresence initial={false}>
+          <Stack spacing={2}>
+            {sortedTodos.map((todo) => (
+              <motion.div
+                key={todo._id || todo.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <TodoItem todo={todo} onEdit={handleEdit} />
+              </motion.div>
+            ))}
+          </Stack>
+        </AnimatePresence>
+      );
+    }
+
+    return (
+      <Box sx={{ textAlign: "center", py: 6 }}>
+        <Alert severity="info" sx={{ maxWidth: 400, mx: "auto", mb: 2 }}>
+          No tasks found
+        </Alert>
+        <Typography variant="body2" color="text.secondary">
+          {filter !== "all"
+            ? `Try switching to "All" to see all your tasks.`
+            : "Add a new task to get started!"}
+        </Typography>
+      </Box>
+    );
+  };
 
   return (
     <Card elevation={0} sx={{ mb: 3 }}>
@@ -102,13 +161,18 @@ export default function TodoList() {
                   variant={filter === btn.id ? "contained" : "outlined"}
                   onClick={() => setFilter(btn.id)}
                   startIcon={btn.icon}
+                  disabled={isLoading}
                 >
                   {btn.label}
                 </Button>
               ))}
             </ButtonGroup>
 
-            <FormControl size="small" sx={{ minWidth: 120 }}>
+            <FormControl
+              size="small"
+              sx={{ minWidth: 120 }}
+              disabled={isLoading}
+            >
               <InputLabel id="sort-select-label">Sort By</InputLabel>
               <Select
                 labelId="sort-select-label"
@@ -132,43 +196,7 @@ export default function TodoList() {
 
         <Divider sx={{ mb: 2 }} />
 
-        {editingTodo ? (
-          <TodoForm todoToEdit={editingTodo} onCancel={handleCancelEdit} />
-        ) : (
-          <>
-            {sortedTodos.length > 0 ? (
-              <AnimatePresence initial={false}>
-                <Stack spacing={2}>
-                  {sortedTodos.map((todo) => (
-                    <motion.div
-                      key={todo.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <TodoItem todo={todo} onEdit={handleEdit} />
-                    </motion.div>
-                  ))}
-                </Stack>
-              </AnimatePresence>
-            ) : (
-              <Box sx={{ textAlign: "center", py: 6 }}>
-                <Alert
-                  severity="info"
-                  sx={{ maxWidth: 400, mx: "auto", mb: 2 }}
-                >
-                  No tasks found
-                </Alert>
-                <Typography variant="body2" color="text.secondary">
-                  {filter !== "all"
-                    ? `Try switching to "All" to see all your tasks.`
-                    : "Add a new task to get started!"}
-                </Typography>
-              </Box>
-            )}
-          </>
-        )}
+        {renderContent()}
       </CardContent>
     </Card>
   );

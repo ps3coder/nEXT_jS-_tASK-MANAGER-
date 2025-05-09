@@ -30,6 +30,7 @@ export default function AuthPage() {
   const [error, setError] = useState("");
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+  const [mounted, setMounted] = useState(false);
 
   // Form data state
   const [loginEmail, setLoginEmail] = useState("");
@@ -39,11 +40,19 @@ export default function AuthPage() {
   const [registerPassword, setRegisterPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
+  // Set mounted state after initial render
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    // Skip redirect during server rendering or before component is mounted
+    if (!mounted || status === "loading") return;
+
     if (status === "authenticated") {
       router.push("/");
     }
-  }, [status, router]);
+  }, [status, router, mounted]);
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -167,11 +176,15 @@ export default function AuthPage() {
     setShowSuccessMessage(false);
   };
 
-  if (status === "loading") {
+  // Show loading state while checking auth
+  // Don't use status directly to prevent hydration mismatch
+  if (!mounted || status === "loading") {
     return (
       <Container maxWidth="sm" sx={{ mt: 8, textAlign: "center" }}>
-        <CircularProgress />
-        <Typography sx={{ mt: 2 }}>Loading...</Typography>
+        <Box sx={{ visibility: mounted ? "visible" : "hidden" }}>
+          <CircularProgress />
+          <Typography sx={{ mt: 2 }}>Loading...</Typography>
+        </Box>
       </Container>
     );
   }

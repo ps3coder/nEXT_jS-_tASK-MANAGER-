@@ -3,10 +3,16 @@
 import { createTheme, ThemeProvider } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
 import { useTheme } from "@/app/context/ThemeContext";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 
 export function AppThemeProvider({ children }) {
-  const { darkMode } = useTheme();
+  const { darkMode, isLoading } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  // Only render on client-side to prevent hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Generate the theme based on dark mode state
   const theme = useMemo(
@@ -167,6 +173,11 @@ export function AppThemeProvider({ children }) {
       }),
     [darkMode]
   );
+
+  // Prevent hydration mismatch by only showing content once mounted
+  if (!mounted) {
+    return <div style={{ visibility: "hidden" }} />;
+  }
 
   return (
     <ThemeProvider theme={theme}>

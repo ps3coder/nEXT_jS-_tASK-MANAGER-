@@ -23,6 +23,7 @@ import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import SettingsIcon from "@mui/icons-material/Settings";
 import CloseIcon from "@mui/icons-material/Close";
 import { motion, AnimatePresence } from "framer-motion";
+import { formatTime } from "@/app/utils/timeUtils";
 
 export default function PomodoroTimer() {
   const {
@@ -30,7 +31,6 @@ export default function PomodoroTimer() {
     mode,
     timeLeft,
     settings,
-    formatTime,
     startTimer,
     pauseTimer,
     resetTimer,
@@ -42,8 +42,11 @@ export default function PomodoroTimer() {
   const { todos } = useTodos();
   const [showSettings, setShowSettings] = useState(false);
 
-  // Find selected task details
-  const selectedTask = todos.find((todo) => todo.id === selectedTaskId);
+  // Find selected task details with support for both MongoDB _id and localStorage id
+  const selectedTask = todos.find(
+    (todo) =>
+      (todo._id && todo._id === selectedTaskId) || todo.id === selectedTaskId
+  );
 
   // Mode buttons
   const modeButtons = [
